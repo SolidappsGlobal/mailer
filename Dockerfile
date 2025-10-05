@@ -1,10 +1,14 @@
 # Arquivo principal para Cloud Run
 FROM python:3.11-slim
 
+# Configurar debconf para modo não-interativo
+ENV DEBIAN_FRONTEND=noninteractive
+
 # Instalar dependências do sistema
 RUN apt-get update && apt-get install -y \
     gcc \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Definir diretório de trabalho
 WORKDIR /app
