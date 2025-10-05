@@ -47,12 +47,7 @@ gcloud run deploy csv-processor \
   --cpu 2 \
   --timeout 900 \
   --set-env-vars "BUBBLE_API_BASE_URL=https://myunitrust.com/version-live/api/1.1/obj" \
-  --set-env-vars "BUBBLE_API_TOKEN=eafe2749ca27a1c37ccf000431c2d083" \
-  --set-env-vars "BUBBLE_TABLE_NAME=prelicensingcsv" \
-  --set-env-vars "BACK4APP_API_BASE_URL=https://parseapi.back4app.com/classes" \
-  --set-env-vars "BACK4APP_APP_ID=mK60GEj1uzfoICD3dFxW75KZ5K77bbBoaWeeENeK" \
-  --set-env-vars "BACK4APP_MASTER_KEY=ZDYmU9PLUhJRhTscXJGBFlU8wThrKY6Q0alTtZu2"
-```
+ 
 
 ## 📋 Variáveis de Ambiente
 
@@ -72,7 +67,7 @@ Após o deploy, teste com:
 ```bash
 curl -X POST https://seu-servico.a.run.app \
   -H "Content-Type: application/json" \
-  -H "bubble: eafe2749ca27a1c37ccf000431c2d083" \
+ 
   -d '{"csvfile": "https://exemplo.com/dados.csv"}'
 ```
 
