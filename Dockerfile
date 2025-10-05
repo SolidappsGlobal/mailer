@@ -16,8 +16,8 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 COPY requirements.txt .
 
 # Atualizar pip e instalar dependências Python
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip --root-user-action=ignore && \
+    pip install --no-cache-dir -r requirements.txt --root-user-action=ignore
 
 # Copiar código da aplicação
 COPY main.py .
