@@ -9,6 +9,7 @@ from typing import Optional
 import dateutil.parser
 
 import aiohttp
+from flask import Flask, request, jsonify
 
 # Counters for Bubble
 new_records_count = 0
@@ -32,6 +33,9 @@ try:
     logger.info("Google Cloud Logging initialized successfully")
 except Exception as e:
     logger.warning(f"Google Cloud Logging not available: {e}")
+
+# Initialize Flask app
+app = Flask(__name__)
 
 # Configuration
 API_BASE_URL = os.environ["BUBBLE_API_BASE_URL"]
@@ -439,25 +443,39 @@ async def fetch_csv_from_url(session: aiohttp.ClientSession, url: str) -> str:
         logger.error(f"Failed to fetch CSV from {url}: {e}")
         raise
 
-def main(request):
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({"status": "healthy", "message": "Service is running"}), 200
+
+@app.route('/', methods=['POST'])
+def process_csv_endpoint():
+    """Main CSV processing endpoint"""
     try:
+        # Reset counters
+        global new_records_count, updated_records_count, new_records_back4app_count, updated_records_back4app_count
+        new_records_count = 0
+        updated_records_count = 0
+        new_records_back4app_count = 0
+        updated_records_back4app_count = 0
+        
         # Check for the 'bubble' header with value 'X'
         if request.headers.get('bubble') != 'eafe2749ca27a1c37ccf000431c2d083':
             logger.error("Unauthorized request: missing or invalid 'bubble' header")
-            return "Unauthorized: missing or invalid 'bubble' header", 401
+            return jsonify({"error": "Unauthorized: missing or invalid 'bubble' header"}), 401
         
         # Expect JSON payload with 'csvfile' key
         content_type = request.headers.get('Content-Type', '')
         if 'application/json' not in content_type.lower():
-            return "Content-Type must be application/json", 400
+            return jsonify({"error": "Content-Type must be application/json"}), 400
         
         request_json = request.get_json()
         if not isinstance(request_json, dict) or 'csvfile' not in request_json:
-            return "Request body must be JSON with a 'csvfile' key", 400
+            return jsonify({"error": "Request body must be JSON with a 'csvfile' key"}), 400
         
         csv_url = request_json['csvfile']
         if not isinstance(csv_url, str) or not csv_url.strip():
-            return "Invalid or empty URL", 400
+            return jsonify({"error": "Invalid or empty URL"}), 400
 
         # Fetch CSV content from URL
         async def process_csv():
@@ -475,17 +493,19 @@ def main(request):
                     f"{updated_records_count} updated. Back4App: {new_records_back4app_count} new, "
                     f"{updated_records_back4app_count} updated.")
         
-        return "Processing completed", 200
+        return jsonify({
+            "message": "Processing completed",
+            "bubble": {"new": new_records_count, "updated": updated_records_count},
+            "back4app": {"new": new_records_back4app_count, "updated": updated_records_back4app_count}
+        }), 200
     except Exception as e:
         logger.error(f"Error processing request: {e}")
-        return "Internal server error", 500
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
 # Cloud Run entry point
 if __name__ == "__main__":
     try:
-        from functions_framework import create_app
-        logger.info("Starting Cloud Run server...")
-        app = create_app(main)
+        logger.info("Starting Flask server...")
         port = int(os.environ.get("PORT", 8080))
         logger.info(f"Server will listen on port {port}")
         app.run(host="0.0.0.0", port=port, debug=False)
