@@ -9,7 +9,6 @@ from typing import Optional
 import dateutil.parser
 
 import aiohttp
-from google.cloud import logging as cloud_logging
 
 # Counters for Bubble
 new_records_count = 0
@@ -19,13 +18,20 @@ updated_records_count = 0
 new_records_back4app_count = 0
 updated_records_back4app_count = 0
 
-cloud_logging_client = cloud_logging.Client()
-cloud_logging_client.setup_logging()
-
+# Setup logging
 logging.basicConfig(stream=sys.stdout,
                     level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+# Try to setup Google Cloud Logging if available
+try:
+    from google.cloud import logging as cloud_logging
+    cloud_logging_client = cloud_logging.Client()
+    cloud_logging_client.setup_logging()
+    logger.info("Google Cloud Logging initialized successfully")
+except Exception as e:
+    logger.warning(f"Google Cloud Logging not available: {e}")
 
 # Configuration
 API_BASE_URL = os.environ["BUBBLE_API_BASE_URL"]
@@ -476,6 +482,13 @@ def main(request):
 
 # Cloud Run entry point
 if __name__ == "__main__":
-    from functions_framework import create_app
-    app = create_app(main)
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    try:
+        from functions_framework import create_app
+        logger.info("Starting Cloud Run server...")
+        app = create_app(main)
+        port = int(os.environ.get("PORT", 8080))
+        logger.info(f"Server will listen on port {port}")
+        app.run(host="0.0.0.0", port=port, debug=False)
+    except Exception as e:
+        logger.error(f"Failed to start server: {e}")
+        sys.exit(1)
