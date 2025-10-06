@@ -43,3 +43,6 @@ gcloud run deploy $SERVICE_NAME \
 
 echo "✅ Deploy concluído!"
 echo "🌐 URL do serviço: https://$SERVICE_NAME-$REGION-$PROJECT_ID.a.run.app"
+echo "📱 Frontend disponível em: https://$SERVICE_NAME-$REGION-$PROJECT_ID.a.run.app/"
+echo "🔧 API endpoint: https://$SERVICE_NAME-$REGION-$PROJECT_ID.a.run.app/ (POST)"
+echo "❤️ Health check: https://$SERVICE_NAME-$REGION-$PROJECT_ID.a.run.app/health"

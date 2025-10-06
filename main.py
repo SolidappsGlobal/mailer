@@ -9,7 +9,7 @@ from typing import Optional
 import dateutil.parser
 
 import aiohttp
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file, send_from_directory
 
 # Counters for Bubble
 new_records_count = 0
@@ -447,6 +447,22 @@ async def fetch_csv_from_url(session: aiohttp.ClientSession, url: str) -> str:
 def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "message": "Service is running"}), 200
+
+# Static file routes for frontend
+@app.route('/', methods=['GET'])
+def serve_frontend():
+    """Serve the main frontend page"""
+    return send_file('index.html')
+
+@app.route('/script.js')
+def serve_script():
+    """Serve JavaScript file"""
+    return send_file('script.js', mimetype='application/javascript')
+
+@app.route('/styles.css')
+def serve_styles():
+    """Serve CSS file"""
+    return send_file('styles.css', mimetype='text/css')
 
 @app.route('/', methods=['POST'])
 def process_csv_endpoint():

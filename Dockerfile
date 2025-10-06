@@ -25,6 +25,9 @@ RUN pip install --no-cache-dir --upgrade pip --root-user-action=ignore && \
 
 # Copiar código da aplicação
 COPY main.py .
+COPY index.html .
+COPY script.js .
+COPY styles.css .
 
 # Mudar ownership para o usuário não-root
 RUN chown -R appuser:appuser /app
