@@ -204,6 +204,46 @@ python -m http.server 8000
 - [ ] User authentication
 - [ ] Change history
 
+## 📊 Logging and Monitoring
+
+### Log Configuration
+The application includes comprehensive logging for monitoring and debugging:
+
+#### **Log Levels**
+- **INFO**: General application flow and requests
+- **WARNING**: Non-critical issues (e.g., missing Cloud Logging)
+- **ERROR**: Critical errors and exceptions
+
+#### **Log Output**
+- **Console**: All logs are written to stdout for Cloud Run
+- **Google Cloud Logging**: Automatically integrated when available
+- **Structured Format**: Timestamp, logger name, level, and message
+
+#### **What Gets Logged**
+- **Application startup** with configuration details
+- **HTTP requests** (method, URL, IP address)
+- **HTTP responses** (status codes)
+- **CSV processing** (URL, row counts, progress)
+- **API calls** (Bubble and Back4App operations)
+- **Errors and exceptions** with full stack traces
+
+#### **Viewing Logs**
+```bash
+# Cloud Run logs
+gcloud logs read --service=your-service-name --limit=50
+
+# Real-time logs
+gcloud logs tail --service=your-service-name
+
+# Filter by severity
+gcloud logs read --service=your-service-name --severity=ERROR
+```
+
+#### **Log Files**
+- `logging.conf`: Configuration file for structured logging
+- Automatically included in Docker container
+- No additional setup required
+
 ## 🔒 Security
 
 ### API Keys Protection

@@ -20,22 +20,54 @@ new_records_back4app_count = 0
 updated_records_back4app_count = 0
 
 # Setup logging
-logging.basicConfig(stream=sys.stdout,
-                    level=logging.INFO,
-                    format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
+def setup_logging():
+    """Configure application logging for Cloud Run"""
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    
+    # Remove existing handlers to avoid duplicates
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Create console handler for stdout (Cloud Run requirement)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    
+    # Create detailed formatter for application logs
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    console_handler.setFormatter(formatter)
+    
+    # Add handler to root logger
+    root_logger.addHandler(console_handler)
+    
+    # Create application logger
+    app_logger = logging.getLogger(__name__)
+    app_logger.setLevel(logging.INFO)
+    
+    return app_logger
 
-# Try to setup Google Cloud Logging if available
-try:
-    from google.cloud import logging as cloud_logging
-    cloud_logging_client = cloud_logging.Client()
-    cloud_logging_client.setup_logging()
-    logger.info("Google Cloud Logging initialized successfully")
-except Exception as e:
-    logger.warning(f"Google Cloud Logging not available: {e}")
+# Initialize logger
+logger = setup_logging()
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Configure Flask logging
+app.logger.setLevel(logging.INFO)
+
+# Add request logging middleware
+@app.before_request
+def log_request_info():
+    logger.info(f"Request: {request.method} {request.url} from {request.remote_addr}")
+
+@app.after_request
+def log_response_info(response):
+    logger.info(f"Response: {response.status_code} for {request.method} {request.url}")
+    return response
 
 # Configuration
 API_BASE_URL = os.environ["BUBBLE_API_BASE_URL"]
@@ -446,27 +478,32 @@ async def fetch_csv_from_url(session: aiohttp.ClientSession, url: str) -> str:
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
+    logger.info("Health check requested")
     return jsonify({"status": "healthy", "message": "Service is running"}), 200
 
 # Static file routes for frontend
 @app.route('/', methods=['GET'])
 def serve_frontend():
     """Serve the main frontend page"""
+    logger.info("Serving frontend page")
     return send_file('index.html')
 
 @app.route('/script.js')
 def serve_script():
     """Serve JavaScript file"""
+    logger.info("Serving JavaScript file")
     return send_file('script.js', mimetype='application/javascript')
 
 @app.route('/styles.css')
 def serve_styles():
     """Serve CSS file"""
+    logger.info("Serving CSS file")
     return send_file('styles.css', mimetype='text/css')
 
 @app.route('/', methods=['POST'])
 def process_csv_endpoint():
     """Main CSV processing endpoint"""
+    logger.info("CSV processing endpoint called")
     try:
         # Reset counters
         global new_records_count, updated_records_count, new_records_back4app_count, updated_records_back4app_count
@@ -493,9 +530,12 @@ def process_csv_endpoint():
         if not isinstance(csv_url, str) or not csv_url.strip():
             return jsonify({"error": "Invalid or empty URL"}), 400
 
+        logger.info(f"Processing CSV from URL: {csv_url}")
+
         # Fetch CSV content from URL
         async def process_csv():
             async with aiohttp.ClientSession() as session:
+                logger.info("Fetching CSV content from URL")
                 content = await fetch_csv_from_url(session, csv_url)
                 text_stream = io.StringIO(content)
                 reader = csv.DictReader(text_stream)
@@ -521,9 +561,19 @@ def process_csv_endpoint():
 # Cloud Run entry point
 if __name__ == "__main__":
     try:
-        logger.info("Starting Flask server...")
+        logger.info("=" * 50)
+        logger.info("Starting CSV Processor Service")
+        logger.info("=" * 50)
+        logger.info("Configuration loaded:")
+        logger.info(f"  - Bubble API: {API_BASE_URL}")
+        logger.info(f"  - Table: {TABLE_NAME}")
+        logger.info(f"  - Back4App API: {BACK4APP_API_BASE_URL}")
+        logger.info(f"  - Max Concurrent: {MAX_CONCURRENT}")
+        logger.info(f"  - Chunk Size: {CHUNK_SIZE}")
+        logger.info("=" * 50)
+        
         port = int(os.environ.get("PORT", 8080))
-        logger.info(f"Server will listen on port {port}")
+        logger.info(f"Starting Flask server on port {port}")
         app.run(host="0.0.0.0", port=port, debug=False)
     except Exception as e:
         logger.error(f"Failed to start server: {e}")

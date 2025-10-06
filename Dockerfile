@@ -28,6 +28,7 @@ COPY main.py .
 COPY index.html .
 COPY script.js .
 COPY styles.css .
+COPY logging.conf .
 
 # Mudar ownership para o usuário não-root
 RUN chown -R appuser:appuser /app
