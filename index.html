@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agents - Pre-Licensing Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <h1>Agents</h1>
+                <div class="summary">
+                    <span class="total">Total: <span id="total-count">0</span></span>
+                    <span class="selected">Selected: <span id="selected-count">0</span></span>
+                </div>
+            </div>
+            <div class="header-right">
+                <button class="btn btn-primary" id="export-csv">
+                    <i class="fas fa-download"></i>
+                    Export CSV
+                </button>
+                <button class="btn btn-secondary" id="clear-filters">
+                    <i class="fas fa-times"></i>
+                    Clear Filters
+                </button>
+            </div>
+        </div>
+
+        <!-- Filters removed - now using column-specific filters -->
+
+        <!-- Table Container -->
+        <div class="table-container">
+            <table class="agents-table" id="agents-table">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-column="agent">
+                            <div class="th-content">
+                                <span>Agent</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon" onclick="toggleFilter('agent')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('agent', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-agent" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('agent', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('agent', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('agent')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('agent')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown advanced-filter" id="filter-agent" style="display: none;">
+                                <div class="filter-condition">
+                                    <select id="agent-condition" onchange="updateAgentFilter()">
+                                        <option value="contains">Contains</option>
+                                        <option value="not_contains">Does not contain</option>
+                                        <option value="equals">Equals</option>
+                                        <option value="not_equals">Does not equal</option>
+                                        <option value="starts_with">Begins with</option>
+                                        <option value="ends_with">Ends with</option>
+                                        <option value="blank">Blank</option>
+                                        <option value="not_blank">Not blank</option>
+                                    </select>
+                                </div>
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Filter..." id="search-agent-filter" oninput="updateAgentFilter()">
+                                </div>
+                                <div class="filter-actions">
+                                    <button class="btn-apply" onclick="applyAgentFilter()">Apply</button>
+                                    <button class="btn-clear" onclick="clearAgentFilter()">Clear</button>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" data-column="ufg">
+                            <div class="th-content">
+                                <span>UFG</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon" onclick="toggleFilter('ufg')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('ufg', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-ufg" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('ufg', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('ufg', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('ufg')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('ufg')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown" id="filter-ufg" style="display: none;">
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Search..." id="search-ufg-filter">
+                                </div>
+                                <div class="filter-options" id="ufg-options">
+                                    <!-- Options will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" data-column="preLicenseEnrollment">
+                            <div class="th-content">
+                                <span>Pre-License Enroll...</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon" onclick="toggleFilter('preLicenseEnrollment')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('preLicenseEnrollment', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-preLicenseEnrollment" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('preLicenseEnrollment', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('preLicenseEnrollment', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('preLicenseEnrollment')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('preLicenseEnrollment')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown" id="filter-preLicenseEnrollment" style="display: none;">
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Search..." id="search-preLicenseEnrollment-filter">
+                                </div>
+                                <div class="filter-options" id="preLicenseEnrollment-options">
+                                    <!-- Options will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" data-column="licensed">
+                            <div class="th-content">
+                                <span>Licensed</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon active" onclick="toggleFilter('licensed')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('licensed', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-licensed" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('licensed', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('licensed', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('licensed')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('licensed')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown" id="filter-licensed" style="display: none;">
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Search..." id="search-licensed-filter">
+                                </div>
+                                <div class="filter-options" id="licensed-options">
+                                    <!-- Options will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" data-column="preLicensePercent">
+                            <div class="th-content">
+                                <span>Pre-License %</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon active" onclick="toggleFilter('preLicensePercent')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('preLicensePercent', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-preLicensePercent" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('preLicensePercent', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('preLicensePercent', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('preLicensePercent')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('preLicensePercent')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown" id="filter-preLicensePercent" style="display: none;">
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Search..." id="search-preLicensePercent-filter">
+                                </div>
+                                <div class="filter-options" id="preLicensePercent-options">
+                                    <!-- Options will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" data-column="enrollmentDate">
+                            <div class="th-content">
+                                <span>Enrollment Date</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon" onclick="toggleFilter('enrollmentDate')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('enrollmentDate', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-enrollmentDate" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('enrollmentDate', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('enrollmentDate', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('enrollmentDate')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('enrollmentDate')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown" id="filter-enrollmentDate" style="display: none;">
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Search..." id="search-enrollmentDate-filter">
+                                </div>
+                                <div class="filter-options" id="enrollmentDate-options">
+                                    <!-- Options will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" data-column="finishDate">
+                            <div class="th-content">
+                                <span>Finish Date</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon" onclick="toggleFilter('finishDate')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('finishDate', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-finishDate" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('finishDate', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('finishDate', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('finishDate')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('finishDate')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown" id="filter-finishDate" style="display: none;">
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Search..." id="search-finishDate-filter">
+                                </div>
+                                <div class="filter-options" id="finishDate-options">
+                                    <!-- Options will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" data-column="timeSpent">
+                            <div class="th-content">
+                                <span>Time Spent</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon" onclick="toggleFilter('timeSpent')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('timeSpent', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-timeSpent" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('timeSpent', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('timeSpent', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('timeSpent')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('timeSpent')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown" id="filter-timeSpent" style="display: none;">
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Search..." id="search-timeSpent-filter">
+                                </div>
+                                <div class="filter-options" id="timeSpent-options">
+                                    <!-- Options will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" data-column="lastLogin">
+                            <div class="th-content">
+                                <span>Last Login</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon" onclick="toggleFilter('lastLogin')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('lastLogin', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-lastLogin" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('lastLogin', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('lastLogin', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('lastLogin')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('lastLogin')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown" id="filter-lastLogin" style="display: none;">
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Search..." id="search-lastLogin-filter">
+                                </div>
+                                <div class="filter-options" id="lastLogin-options">
+                                    <!-- Options will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" data-column="courseName">
+                            <div class="th-content">
+                                <span>Course Name</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon" onclick="toggleFilter('courseName')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('courseName', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-courseName" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('courseName', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('courseName', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('courseName')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('courseName')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown" id="filter-courseName" style="display: none;">
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Search..." id="search-courseName-filter">
+                                </div>
+                                <div class="filter-options" id="courseName-options">
+                                    <!-- Options will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" data-column="preparedToPass">
+                            <div class="th-content">
+                                <span>Prepared To Pass</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon" onclick="toggleFilter('preparedToPass')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('preparedToPass', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-preparedToPass" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('preparedToPass', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('preparedToPass', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('preparedToPass')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('preparedToPass')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown" id="filter-preparedToPass" style="display: none;">
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Search..." id="search-preparedToPass-filter">
+                                </div>
+                                <div class="filter-options" id="preparedToPass-options">
+                                    <!-- Options will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" data-column="phone">
+                            <div class="th-content">
+                                <span>Phone</span>
+                                <div class="th-actions">
+                                    <i class="fas fa-filter filter-icon" onclick="toggleFilter('phone')"></i>
+                                    <i class="fas fa-ellipsis-v menu-icon" onclick="toggleContextMenu('phone', event)"></i>
+                                </div>
+                            </div>
+                            <div class="context-menu" id="context-menu-phone" style="display: none;">
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('phone', 'asc')">
+                                    <i class="fas fa-sort-up"></i>
+                                    <span>Sort Ascending</span>
+                                </div>
+                                <div class="context-menu-item" onclick="sortColumnFromMenu('phone', 'desc')">
+                                    <i class="fas fa-sort-down"></i>
+                                    <span>Sort Descending</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="togglePinColumn('phone')">
+                                    <i class="fas fa-thumbtack"></i>
+                                    <span>Pin Column</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="autosizeColumn('phone')">
+                                    <span>Autosize This Column</span>
+                                </div>
+                                <div class="context-menu-item" onclick="autosizeAllColumns()">
+                                    <span>Autosize All Columns</span>
+                                </div>
+                                <div class="context-menu-separator"></div>
+                                <div class="context-menu-item" onclick="chooseColumns()">
+                                    <i class="fas fa-th"></i>
+                                    <span>Choose Columns</span>
+                                </div>
+                                <div class="context-menu-item" onclick="resetColumns()">
+                                    <span>Reset Columns</span>
+                                </div>
+                            </div>
+                            <div class="filter-dropdown" id="filter-phone" style="display: none;">
+                                <div class="filter-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Search..." id="search-phone-filter">
+                                </div>
+                                <div class="filter-options" id="phone-options">
+                                    <!-- Options will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="agents-tbody">
+                    <!-- Data will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div class="loading" id="loading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <span>Loading data...</span>
+        </div>
+
+        <!-- No Data Message -->
+        <div class="no-data" id="no-data" style="display: none;">
+            <i class="fas fa-inbox"></i>
+            <span>No agents found</span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

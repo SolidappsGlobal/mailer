@@ -299,23 +299,61 @@ async def update_record_back4app(session: aiohttp.ClientSession, record_id: str,
 async def handle_row(row, bubble_map, back4app_map, session, sem):
     global new_records_count, updated_records_count, new_records_back4app_count, updated_records_back4app_count
     
-    # COMENTADO: Process Bubble - DESABILITADO PARA TESTE
-    # bubble_payload = to_payload(row)
-    # bubble_email = bubble_payload.get("pre_licensing_email")
+    # Process Bubble
+    bubble_payload = to_payload(row)
+    bubble_email = bubble_payload.get("pre_licensing_email")
     
-    # Process Back4App - APENAS BACK4APP
+    # Process Back4App
     back4app_payload = to_back4app_payload(row)
     back4app_email = back4app_payload.get("pre_licensing_email_text")
     
-    logger.info(f"[BACK4APP PROCESSING] Email: {back4app_email}")
-    logger.info(f"[BACK4APP PAYLOAD] {json.dumps(back4app_payload, indent=2)}")
-    
     async with sem:
-        # COMENTADO: Process Bubble - DESABILITADO PARA TESTE
-        # bubble_existing = bubble_map.get(bubble_email) if bubble_email else None
-        # ... (toda lógica do Bubble comentada)
+        # Process Bubble
+        bubble_existing = bubble_map.get(bubble_email) if bubble_email else None
         
-        # Process Back4App - SIMPLIFICADO
+        # Parse DB "last login" if present
+        bubble_db_val = bubble_existing.get("pre_licensing_course_last_login") if bubble_existing else None
+        bubble_db_dt = None
+        if bubble_db_val:
+            bubble_db_dt = parse_record_date(bubble_db_val)
+
+        # Parse CSV "last login" if present
+        bubble_csv_val = bubble_payload.get("pre_licensing_course_last_login")
+        bubble_csv_dt = None
+        if bubble_csv_val:
+            bubble_csv_dt = (
+                datetime.fromisoformat(bubble_csv_val.replace("Z", "+00:00"))
+                        .astimezone(timezone.utc)
+            )
+        
+        # Process Bubble record
+        if bubble_existing:
+            if bubble_csv_dt and (bubble_db_dt is None or bubble_csv_dt > bubble_db_dt):
+                update_fields = [
+                    "pre_licensing_course_last_login",
+                    "time_spent_in_course",
+                    "percentage_ple_complete",
+                    "ple_date_completed",
+                    "pre_licensing_course",
+                    "hiring_manager",
+                    "percentage_prep_complete",
+                    "percentage_sim_complete",
+                    "prepared_to_pass",
+                    "date_enrolled"
+                ]
+                upd = {k: bubble_payload[k] for k in update_fields if k in bubble_payload and bubble_payload[k] not in (None, "")}
+                rid = bubble_existing.get("_id") or bubble_existing.get("id")
+                await update_record(session, rid, upd, str(bubble_email))
+                updated_records_count += 1
+                logger.info(f"[BUBBLE UPDATED] {bubble_email} — changes: {upd}")
+            else:
+                logger.debug(f"[BUBBLE SKIPPED] {bubble_email} — CSV={bubble_csv_dt}, DB={bubble_db_dt}")
+        else:
+            await create_record(session, bubble_payload)
+            new_records_count += 1
+            logger.info(f"[BUBBLE CREATED] {bubble_email}")
+        
+        # Process Back4App
         back4app_existing = back4app_map.get(back4app_email) if back4app_email else None
         
         # Parse DB "last login" if present
@@ -333,45 +371,41 @@ async def handle_row(row, bubble_map, back4app_map, session, sem):
                         .astimezone(timezone.utc)
             )
         
-        # Process Back4App record - SEMPRE CRIAR/ATUALIZAR
+        # Process Back4App record
         if back4app_existing:
-            logger.info(f"[BACK4APP EXISTING] Found existing record for {back4app_email}")
-            # Sempre atualizar para teste
-            update_fields = [
-                "pre_licensing_course_last_login_date",
-                "time_spent_text",
-                "ple_complete_number",
-                "ple_date_completed_date",
-                "pre_licensing_course_text",
-                "hiring_manager_text",
-                "percentage_prep_complete_number",
-                "percentage_sim_complete_number",
-                "prepared_to_pass_text",
-                "date_enrolled_date"
-            ]
-            upd = {k: back4app_payload[k] for k in update_fields if k in back4app_payload and back4app_payload[k] not in (None, "")}
-            rid = back4app_existing.get("objectId")
-            await update_record_back4app(session, rid, upd, str(back4app_email))
-            updated_records_back4app_count += 1
-            logger.info(f"[BACK4APP UPDATED] {back4app_email} — changes: {upd}")
+            if back4app_csv_dt and (back4app_db_dt is None or back4app_csv_dt > back4app_db_dt):
+                update_fields = [
+                    "pre_licensing_course_last_login_date",
+                    "time_spent_text",
+                    "ple_complete_number",
+                    "ple_date_completed_date",
+                    "pre_licensing_course_text",
+                    "hiring_manager_text",
+                    "percentage_prep_complete_number",
+                    "percentage_sim_complete_number",
+                    "prepared_to_pass_text",
+                    "date_enrolled_date"
+                ]
+                upd = {k: back4app_payload[k] for k in update_fields if k in back4app_payload and back4app_payload[k] not in (None, "")}
+                rid = back4app_existing.get("objectId")
+                await update_record_back4app(session, rid, upd, str(back4app_email))
+                updated_records_back4app_count += 1
+                logger.info(f"[BACK4APP UPDATED] {back4app_email} — changes: {upd}")
+            else:
+                logger.debug(f"[BACK4APP SKIPPED] {back4app_email} — CSV={back4app_csv_dt}, DB={back4app_db_dt}")
         else:
-            logger.info(f"[BACK4APP NEW] Creating new record for {back4app_email}")
             await create_record_back4app(session, back4app_payload)
             new_records_back4app_count += 1
             logger.info(f"[BACK4APP CREATED] {back4app_email}")
 
 async def process_chunk(chunk, session, sem):
-    # COMENTADO: Extract emails for both platforms - APENAS BACK4APP
-    # bubble_emails = [r.get("EmailAddress", "").lower().strip() for r in chunk if r.get("EmailAddress")]
+    # Extract emails for both platforms
+    bubble_emails = [r.get("EmailAddress", "").lower().strip() for r in chunk if r.get("EmailAddress")]
     back4app_emails = [r.get("EmailAddress", "").lower().strip() for r in chunk if r.get("EmailAddress")]
     
-    # COMENTADO: Fetch existing records from both platforms - APENAS BACK4APP
-    # bubble_map = await get_records_by_emails(session, bubble_emails)
-    bubble_map = {}  # Vazio para não quebrar o código
+    # Fetch existing records from both platforms
+    bubble_map = await get_records_by_emails(session, bubble_emails)
     back4app_map = await get_records_by_emails_back4app(session, back4app_emails)
-    
-    logger.info(f"[BACK4APP CHUNK] Processing {len(chunk)} rows")
-    logger.info(f"[BACK4APP CHUNK] Found {len(back4app_map)} existing records")
     
     # Process each row for both platforms
     tasks = [handle_row(row, bubble_map, back4app_map, session, sem) for row in chunk]
@@ -381,15 +415,12 @@ async def process_chunk(chunk, session, sem):
             logger.error(f"Task failed: {result}")
 
 async def main_async(rows):
-    logger.info(f"[BACK4APP MAIN] Starting processing of {len(rows)} rows")
     sem = asyncio.Semaphore(MAX_CONCURRENT)
     connector = aiohttp.TCPConnector(limit_per_host=MAX_CONCURRENT)
     async with aiohttp.ClientSession(connector=connector) as session:
         for idx in range(0, len(rows), CHUNK_SIZE):
             chunk = rows[idx : idx + CHUNK_SIZE]
-            logger.info(f"[BACK4APP MAIN] Processing chunk {idx//CHUNK_SIZE + 1} with {len(chunk)} rows")
             await process_chunk(chunk, session, sem)
-    logger.info(f"[BACK4APP MAIN] Processing completed")
 
 # Google Cloud Function Entry Point
 
@@ -446,34 +477,25 @@ def process_csv_endpoint():
         if not isinstance(csv_url, str) or not csv_url.strip():
             return jsonify({"error": "Invalid or empty URL"}), 400
 
-        logger.info(f"[BACK4APP ENDPOINT] Received CSV URL: {csv_url}")
-
         # Fetch CSV content from URL
         async def process_csv():
             async with aiohttp.ClientSession() as session:
-                logger.info(f"[BACK4APP ENDPOINT] Fetching CSV from URL...")
                 content = await fetch_csv_from_url(session, csv_url)
-                logger.info(f"[BACK4APP ENDPOINT] CSV content length: {len(content)} characters")
-                
                 text_stream = io.StringIO(content)
                 reader = csv.DictReader(text_stream)
                 rows = [row for row in reader if any(row.values())]
-                logger.info(f"[BACK4APP ENDPOINT] Parsed {len(rows)} rows from CSV")
-                
-                # Log first row for debugging
-                if rows:
-                    logger.info(f"[BACK4APP ENDPOINT] First row: {json.dumps(rows[0], indent=2)}")
-                
+                logger.info(f"Starting processing of {len(rows)} rows")
                 await main_async(rows)
         
         asyncio.run(process_csv())
 
-        logger.info(f"[BACK4APP ENDPOINT] Processing completed — Back4App: {new_records_back4app_count} new, "
+        logger.info(f"Processing completed — Bubble: {new_records_count} new, "
+                    f"{updated_records_count} updated. Back4App: {new_records_back4app_count} new, "
                     f"{updated_records_back4app_count} updated.")
         
         return jsonify({
             "message": "Processing completed",
-            "bubble": {"new": 0, "updated": 0},  # Sempre 0 pois está desabilitado
+            "bubble": {"new": new_records_count, "updated": updated_records_count},
             "back4app": {"new": new_records_back4app_count, "updated": updated_records_back4app_count}
         }), 200
     except Exception as e:
