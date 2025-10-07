@@ -139,7 +139,7 @@ def to_payload(row: dict) -> dict:
     email = raw_email.lower().strip()
 
     payload = {
-        "pre_licensing_email": email,
+        "UserPreLicensingEMAIL": email,  # ✅ Campo correto do Bubble
         "first_name": row.get("FirstName"),
         "last_name": row.get("LastName"),
         "phone": phone,
@@ -176,7 +176,7 @@ def to_back4app_payload(row: dict) -> dict:
         "last_name_text": row.get("LastName"),
         "pre_licensing_email_text": email,
         "phone_text": phone,
-        "imo_text": row.get("Department"),
+        "imo_custom_imo": row.get("Department"),  # ✅ Campo correto do Back4App
         "hiring_manager_text": row.get("HiringManager"),
         "pre_licensing_course_text": row.get("Course"),
         "prepared_to_pass_text": row.get("Prepared to Pass"),
@@ -236,7 +236,7 @@ async def get_records_by_emails(session: aiohttp.ClientSession, emails: list[str
         params["cursor"] += params["limit"]
     
     # logger.info(f"Found {len(results)} existing records")
-    return {r.get("pre_licensing_email", "").lower().strip(): r for r in results}
+    return {r.get("UserPreLicensingEMAIL", "").lower().strip(): r for r in results}
 
 async def create_record(session: aiohttp.ClientSession, payload: dict):
     url = f"{API_BASE_URL}/{TABLE_NAME}"
@@ -251,7 +251,7 @@ async def create_record(session: aiohttp.ClientSession, payload: dict):
                 logger.debug(f"[CREATE DATA] {data}")
             except Exception:
                 logger.debug("[CREATE DATA] Response not JSON")
-        logger.info(f"[CREATE SUCCESS] {payload.get('pre_licensing_email')}")
+        logger.info(f"[CREATE SUCCESS] {payload.get('UserPreLicensingEMAIL')}")
     except Exception as e:
         logger.error(f"[CREATE FAILED] {payload.get('UserPreLicensingEMAIL')} → {e}")
         raise
@@ -333,7 +333,7 @@ async def handle_row(row, bubble_map, back4app_map, session, sem):
     
     # Process Bubble
     bubble_payload = to_payload(row)
-    bubble_email = bubble_payload.get("pre_licensing_email")
+    bubble_email = bubble_payload.get("UserPreLicensingEMAIL")
     
     # Process Back4App
     back4app_payload = to_back4app_payload(row)
