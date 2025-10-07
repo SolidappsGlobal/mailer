@@ -181,9 +181,9 @@ def to_back4app_payload(row: dict) -> dict:
         "pre_licensing_course_text": row.get("Course"),
         "prepared_to_pass_text": row.get("Prepared to Pass"),
         "time_spent_text": row.get("TimeSpent"),
-        **({"date_enrolled_date": to_utc_iso(enrolled)} if enrolled else {}),
-        **({"pre_licensing_course_last_login_date": to_utc_iso(logged)} if logged else {}),
-        **({"ple_date_completed_date": to_utc_iso(completed)} if completed else {}),
+        **({"date_enrolled_date": {"__type": "Date", "iso": to_utc_iso(enrolled)}} if enrolled else {}),
+        **({"pre_licensing_course_last_login_date": {"__type": "Date", "iso": to_utc_iso(logged)}} if logged else {}),
+        **({"ple_date_completed_date": {"__type": "Date", "iso": to_utc_iso(completed)}} if completed else {}),
         **({"ple_complete_number": ple_complete} if ple_complete is not None else {}),
         **({"percentage_prep_complete_number": prep_complete} if prep_complete is not None else {}),
         **({"percentage_sim_complete_number": sim_complete} if sim_complete is not None else {}),
@@ -331,113 +331,134 @@ async def update_record_back4app(session: aiohttp.ClientSession, record_id: str,
 async def handle_row(row, bubble_map, back4app_map, session, sem):
     global new_records_count, updated_records_count, new_records_back4app_count, updated_records_back4app_count
     
-    # Process Bubble
-    bubble_payload = to_payload(row)
-    bubble_email = bubble_payload.get("UserPreLicensingEMAIL")
-    
-    # Process Back4App
+    # Process Back4App FIRST (independente do Bubble)
     back4app_payload = to_back4app_payload(row)
     back4app_email = back4app_payload.get("pre_licensing_email_text")
     
     async with sem:
-        # Process Bubble
-        bubble_existing = bubble_map.get(bubble_email) if bubble_email else None
-        
-        # Parse DB "last login" if present
-        bubble_db_val = bubble_existing.get("pre_licensing_course_last_login") if bubble_existing else None
-        bubble_db_dt = None
-        if bubble_db_val:
-            bubble_db_dt = parse_record_date(bubble_db_val)
+        # Process Back4App FIRST
+        try:
+            back4app_existing = back4app_map.get(back4app_email) if back4app_email else None
+            
+            # Parse DB "last login" if present
+            back4app_db_val = back4app_existing.get("pre_licensing_course_last_login_date") if back4app_existing else None
+            back4app_db_dt = None
+            if back4app_db_val:
+                back4app_db_dt = parse_record_date(back4app_db_val)
 
-        # Parse CSV "last login" if present
-        bubble_csv_val = bubble_payload.get("pre_licensing_course_last_login")
-        bubble_csv_dt = None
-        if bubble_csv_val:
-            bubble_csv_dt = (
-                datetime.fromisoformat(bubble_csv_val.replace("Z", "+00:00"))
-                        .astimezone(timezone.utc)
-            )
-        
-        # Process Bubble record
-        if bubble_existing:
-            if bubble_csv_dt and (bubble_db_dt is None or bubble_csv_dt > bubble_db_dt):
-                update_fields = [
-                    "pre_licensing_course_last_login",
-                    "time_spent_in_course",
-                    "percentage_ple_complete",
-                    "ple_date_completed",
-                    "pre_licensing_course",
-                    "hiring_manager",
-                    "percentage_prep_complete",
-                    "percentage_sim_complete",
-                    "prepared_to_pass",
-                    "date_enrolled"
-                ]
-                upd = {k: bubble_payload[k] for k in update_fields if k in bubble_payload and bubble_payload[k] not in (None, "")}
-                rid = bubble_existing.get("_id") or bubble_existing.get("id")
-                await update_record(session, rid, upd, str(bubble_email))
-                updated_records_count += 1
-                logger.info(f"[BUBBLE UPDATED] {bubble_email} — changes: {upd}")
+            # Parse CSV "last login" if present
+            back4app_csv_val = back4app_payload.get("pre_licensing_course_last_login_date")
+            back4app_csv_dt = None
+            if back4app_csv_val:
+                back4app_csv_dt = (
+                    datetime.fromisoformat(back4app_csv_val.replace("Z", "+00:00"))
+                            .astimezone(timezone.utc)
+                )
+            
+            # Process Back4App record
+            if back4app_existing:
+                if back4app_csv_dt and (back4app_db_dt is None or back4app_csv_dt > back4app_db_dt):
+                    update_fields = [
+                        "pre_licensing_course_last_login_date",
+                        "time_spent_text",
+                        "ple_complete_number",
+                        "ple_date_completed_date",
+                        "pre_licensing_course_text",
+                        "hiring_manager_text",
+                        "percentage_prep_complete_number",
+                        "percentage_sim_complete_number",
+                        "prepared_to_pass_text",
+                        "date_enrolled_date"
+                    ]
+                    upd = {k: back4app_payload[k] for k in update_fields if k in back4app_payload and back4app_payload[k] not in (None, "")}
+                    rid = back4app_existing.get("objectId")
+                    await update_record_back4app(session, rid, upd, str(back4app_email))
+                    updated_records_back4app_count += 1
+                    logger.info(f"[BACK4APP UPDATED] {back4app_email} — changes: {upd}")
+                else:
+                    logger.debug(f"[BACK4APP SKIPPED] {back4app_email} — CSV={back4app_csv_dt}, DB={back4app_db_dt}")
             else:
-                logger.debug(f"[BUBBLE SKIPPED] {bubble_email} — CSV={bubble_csv_dt}, DB={bubble_db_dt}")
-        else:
-            await create_record(session, bubble_payload)
-            new_records_count += 1
-            logger.info(f"[BUBBLE CREATED] {bubble_email}")
+                await create_record_back4app(session, back4app_payload)
+                new_records_back4app_count += 1
+                logger.info(f"[BACK4APP CREATED] {back4app_email}")
+        except Exception as e:
+            logger.error(f"[BACK4APP ERROR] {back4app_email} — {e}")
+            # Continue processing even if Back4App fails
         
-        # Process Back4App
-        back4app_existing = back4app_map.get(back4app_email) if back4app_email else None
-        
-        # Parse DB "last login" if present
-        back4app_db_val = back4app_existing.get("pre_licensing_course_last_login_date") if back4app_existing else None
-        back4app_db_dt = None
-        if back4app_db_val:
-            back4app_db_dt = parse_record_date(back4app_db_val)
+        # Process Bubble SECOND (independente do Back4App)
+        try:
+            bubble_payload = to_payload(row)
+            bubble_email = bubble_payload.get("UserPreLicensingEMAIL")
+            
+            bubble_existing = bubble_map.get(bubble_email) if bubble_email else None
+            
+            # Parse DB "last login" if present
+            bubble_db_val = bubble_existing.get("pre_licensing_course_last_login") if bubble_existing else None
+            bubble_db_dt = None
+            if bubble_db_val:
+                bubble_db_dt = parse_record_date(bubble_db_val)
 
-        # Parse CSV "last login" if present
-        back4app_csv_val = back4app_payload.get("pre_licensing_course_last_login_date")
-        back4app_csv_dt = None
-        if back4app_csv_val:
-            back4app_csv_dt = (
-                datetime.fromisoformat(back4app_csv_val.replace("Z", "+00:00"))
-                        .astimezone(timezone.utc)
-            )
-        
-        # Process Back4App record
-        if back4app_existing:
-            if back4app_csv_dt and (back4app_db_dt is None or back4app_csv_dt > back4app_db_dt):
-                update_fields = [
-                    "pre_licensing_course_last_login_date",
-                    "time_spent_text",
-                    "ple_complete_number",
-                    "ple_date_completed_date",
-                    "pre_licensing_course_text",
-                    "hiring_manager_text",
-                    "percentage_prep_complete_number",
-                    "percentage_sim_complete_number",
-                    "prepared_to_pass_text",
-                    "date_enrolled_date"
-                ]
-                upd = {k: back4app_payload[k] for k in update_fields if k in back4app_payload and back4app_payload[k] not in (None, "")}
-                rid = back4app_existing.get("objectId")
-                await update_record_back4app(session, rid, upd, str(back4app_email))
-                updated_records_back4app_count += 1
-                logger.info(f"[BACK4APP UPDATED] {back4app_email} — changes: {upd}")
+            # Parse CSV "last login" if present
+            bubble_csv_val = bubble_payload.get("pre_licensing_course_last_login")
+            bubble_csv_dt = None
+            if bubble_csv_val:
+                bubble_csv_dt = (
+                    datetime.fromisoformat(bubble_csv_val.replace("Z", "+00:00"))
+                            .astimezone(timezone.utc)
+                )
+            
+            # Process Bubble record
+            if bubble_existing:
+                if bubble_csv_dt and (bubble_db_dt is None or bubble_csv_dt > bubble_db_dt):
+                    update_fields = [
+                        "pre_licensing_course_last_login",
+                        "time_spent_in_course",
+                        "percentage_ple_complete",
+                        "ple_date_completed",
+                        "pre_licensing_course",
+                        "hiring_manager",
+                        "percentage_prep_complete",
+                        "percentage_sim_complete",
+                        "prepared_to_pass",
+                        "date_enrolled"
+                    ]
+                    upd = {k: bubble_payload[k] for k in update_fields if k in bubble_payload and bubble_payload[k] not in (None, "")}
+                    rid = bubble_existing.get("_id") or bubble_existing.get("id")
+                    await update_record(session, rid, upd, str(bubble_email))
+                    updated_records_count += 1
+                    logger.info(f"[BUBBLE UPDATED] {bubble_email} — changes: {upd}")
+                else:
+                    logger.debug(f"[BUBBLE SKIPPED] {bubble_email} — CSV={bubble_csv_dt}, DB={bubble_db_dt}")
             else:
-                logger.debug(f"[BACK4APP SKIPPED] {back4app_email} — CSV={back4app_csv_dt}, DB={back4app_db_dt}")
-        else:
-            await create_record_back4app(session, back4app_payload)
-            new_records_back4app_count += 1
-            logger.info(f"[BACK4APP CREATED] {back4app_email}")
+                await create_record(session, bubble_payload)
+                new_records_count += 1
+                logger.info(f"[BUBBLE CREATED] {bubble_email}")
+        except Exception as e:
+            logger.error(f"[BUBBLE ERROR] {bubble_email if 'bubble_email' in locals() else 'unknown'} — {e}")
+            # Continue processing even if Bubble fails
 
 async def process_chunk(chunk, session, sem):
     # Extract emails for both platforms
     bubble_emails = [r.get("EmailAddress", "").lower().strip() for r in chunk if r.get("EmailAddress")]
     back4app_emails = [r.get("EmailAddress", "").lower().strip() for r in chunk if r.get("EmailAddress")]
     
-    # Fetch existing records from both platforms
-    bubble_map = await get_records_by_emails(session, bubble_emails)
-    back4app_map = await get_records_by_emails_back4app(session, back4app_emails)
+    # Fetch existing records from both platforms (independente)
+    bubble_map = {}
+    back4app_map = {}
+    
+    try:
+        bubble_map = await get_records_by_emails(session, bubble_emails)
+        logger.info(f"[BUBBLE] Loaded {len(bubble_map)} existing records")
+    except Exception as e:
+        logger.error(f"[BUBBLE] Failed to load existing records: {e}")
+        # Continue without Bubble data
+    
+    try:
+        back4app_map = await get_records_by_emails_back4app(session, back4app_emails)
+        logger.info(f"[BACK4APP] Loaded {len(back4app_map)} existing records")
+    except Exception as e:
+        logger.error(f"[BACK4APP] Failed to load existing records: {e}")
+        # Continue without Back4App data
     
     # Process each row for both platforms
     tasks = [handle_row(row, bubble_map, back4app_map, session, sem) for row in chunk]
@@ -445,6 +466,7 @@ async def process_chunk(chunk, session, sem):
     for result in results:
         if isinstance(result, Exception):
             logger.error(f"Task failed: {result}")
+            # Continue processing other rows
 
 async def main_async(rows):
     sem = asyncio.Semaphore(MAX_CONCURRENT)
