@@ -84,6 +84,7 @@ BACK4APP_API_BASE_URL = os.environ.get("BACK4APP_API_BASE_URL", "https://parseap
 BACK4APP_APP_ID = os.environ.get("BACK4APP_APP_ID", "mK60GEj1uzfoICD3dFxW75KZ5K77bbBoaWeeENeK")
 BACK4APP_MASTER_KEY = os.environ.get("BACK4APP_MASTER_KEY", "ZDYmU9PLUhJRhTscXJGBFlU8wThrKY6Q0alTtZu2")
 BACK4APP_TABLE_NAME = "API_Connector_Users"
+BACK4APP_CSV_TABLE_NAME = "Prelicensingcsv"
 
 HEADERS = {
     "Authorization": f"Bearer {API_TOKEN}",
@@ -181,15 +182,15 @@ def to_back4app_payload(row: dict) -> dict:
     email = raw_email.lower().strip()
 
     payload = {
-        "first_name_text": row.get("FirstName"),
-        "last_name_text": row.get("LastName"),
+        "first_name_text": row.get("FirstName") or "",
+        "last_name_text": row.get("LastName") or "",
         "pre_licensing_email_text": email,
-        "phone_text": phone,
-        "imo_custom_imo": row.get("Department"),  # ✅ Campo correto do Back4App
-        "hiring_manager_text": row.get("HiringManager"),
-        "pre_licensing_course_text": row.get("Course"),
-        "prepared_to_pass_text": row.get("Prepared to Pass"),
-        "time_spent_text": row.get("TimeSpent"),
+        "phone_text": phone or "",
+        "imo_custom_imo": row.get("Department") or "",
+        "hiring_manager_text": row.get("HiringManager") or "",
+        "pre_licensing_course_text": row.get("Course") or "",
+        "prepared_to_pass_text": row.get("Prepared to Pass") or "",
+        "time_spent_text": row.get("TimeSpent") or "",
         **({"date_enrolled_date": {"__type": "Date", "iso": to_utc_iso(enrolled)}} if enrolled else {}),
         **({"pre_licensing_course_last_login_date": {"__type": "Date", "iso": to_utc_iso(logged)}} if logged else {}),
         **({"ple_date_completed_date": {"__type": "Date", "iso": to_utc_iso(completed)}} if completed else {}),
@@ -197,7 +198,8 @@ def to_back4app_payload(row: dict) -> dict:
         **({"percentage_prep_complete_number": prep_complete} if prep_complete is not None else {}),
         **({"percentage_sim_complete_number": sim_complete} if sim_complete is not None else {}),
     }
-    return {k: v for k, v in payload.items() if v is not None}
+    # Retornar todos os campos, mesmo os vazios, para garantir dados completos
+    return payload
 
 # Retryable Request
 async def request_with_retries(session, method, url, **kwargs):
@@ -283,6 +285,93 @@ async def update_record(session: aiohttp.ClientSession, record_id: str, payload:
         logger.error(f"[UPDATE FAILED] {email} → {e}")
         raise
 
+# CSV Files Management Functions
+async def save_csv_file(session: aiohttp.ClientSession, csv_url: str, csv_content: str, filename: str) -> str:
+    """Save CSV file to Prelicensingcsv table and return the objectId"""
+    url = f"{BACK4APP_API_BASE_URL}/{BACK4APP_CSV_TABLE_NAME}"
+    
+    # For large files, save only URL and queue for processing
+    if len(csv_content) > 100000:  # 100KB threshold
+        logger.info(f"[CSV QUEUE] Large file detected, queuing for background processing: {filename}")
+        payload = {
+            "filename": filename,
+            "csv_url": csv_url,
+            "csv_content": "",  # Empty - will be processed in background
+            "file_size": 0,
+            "total_records": 0,
+            "processed_records": 0,
+            "processing_status": "queued",
+            "source_email": "google_apps_script",
+            "imo": "",
+            "queue_priority": 1,
+            "created_at": {"__type": "Date", "iso": to_utc_iso(datetime.now())}
+        }
+    else:
+        # Small files - process immediately
+        imo = ""
+        if csv_content:
+            lines = csv_content.split('\n')
+            if len(lines) > 1:
+                try:
+                    reader = csv.DictReader(io.StringIO(csv_content))
+                    first_row = next(reader, None)
+                    if first_row:
+                        imo = first_row.get("Department", "")
+                except Exception as e:
+                    logger.warning(f"Could not extract IMO from CSV: {e}")
+        
+        payload = {
+            "filename": filename,
+            "csv_url": csv_url,
+            "csv_content": csv_content,
+            "file_size": len(csv_content),
+            "total_records": csv_content.count('\n') - 1 if csv_content else 0,
+            "processed_records": 0,
+            "processing_status": "pending",
+            "source_email": "google_apps_script",
+            "imo": imo
+        }
+    
+    logger.info(f"[CSV SAVE] Saving CSV file: {filename}")
+    try:
+        async with session.post(url, headers=BACK4APP_HEADERS, json=payload) as resp:
+            body = await resp.text()
+            logger.info(f"[CSV SAVE RESPONSE] status={resp.status}, body={body}")
+            resp.raise_for_status()
+            data = json.loads(body)
+            csv_file_id = data.get("objectId")
+            logger.info(f"[CSV SAVE SUCCESS] CSV file saved with ID: {csv_file_id}")
+            return csv_file_id
+    except Exception as e:
+        logger.error(f"[CSV SAVE FAILED] {filename} → {e}")
+        raise
+
+async def update_csv_file_status(session: aiohttp.ClientSession, csv_file_id: str, status: str, processed_records: int = 0, error_message: str = ""):
+    """Update CSV file processing status"""
+    url = f"{BACK4APP_API_BASE_URL}/{BACK4APP_CSV_TABLE_NAME}/{csv_file_id}"
+    
+    payload = {
+        "processing_status": status,
+        "processed_records": processed_records
+    }
+    
+    if error_message:
+        payload["error_message"] = error_message
+    
+    if status == "completed":
+        payload["processed_at"] = {"__type": "Date", "iso": to_utc_iso(datetime.now())}
+    
+    logger.info(f"[CSV UPDATE] Updating CSV file {csv_file_id} status to {status}")
+    try:
+        async with session.put(url, headers=BACK4APP_HEADERS, json=payload) as resp:
+            body = await resp.text()
+            logger.info(f"[CSV UPDATE RESPONSE] status={resp.status}, body={body}")
+            resp.raise_for_status()
+            logger.info(f"[CSV UPDATE SUCCESS] CSV file {csv_file_id} updated")
+    except Exception as e:
+        logger.error(f"[CSV UPDATE FAILED] {csv_file_id} → {e}")
+        raise
+
 # Back4App API Functions
 async def get_records_by_emails_back4app(session: aiohttp.ClientSession, emails: list[str]) -> dict:
     url = f"{BACK4APP_API_BASE_URL}/{BACK4APP_TABLE_NAME}"
@@ -366,26 +455,32 @@ async def handle_row(row, bubble_map, back4app_map, session, sem):
             
             # Process Back4App record
             if back4app_existing:
-                if back4app_csv_dt and (back4app_db_dt is None or back4app_csv_dt > back4app_db_dt):
-                    update_fields = [
-                        "pre_licensing_course_last_login_date",
-                        "time_spent_text",
-                        "ple_complete_number",
-                        "ple_date_completed_date",
-                        "pre_licensing_course_text",
-                        "hiring_manager_text",
-                        "percentage_prep_complete_number",
-                        "percentage_sim_complete_number",
-                        "prepared_to_pass_text",
-                        "date_enrolled_date"
-                    ]
-                    upd = {k: back4app_payload[k] for k in update_fields if k in back4app_payload and back4app_payload[k] not in (None, "")}
+                # Sempre atualizar se houver dados válidos (removida lógica de comparação de data)
+                update_fields = [
+                    "first_name_text",
+                    "last_name_text",
+                    "pre_licensing_email_text",
+                    "phone_text",
+                    "imo_custom_imo",
+                    "hiring_manager_text",
+                    "pre_licensing_course_text",
+                    "prepared_to_pass_text",
+                    "time_spent_text",
+                    "date_enrolled_date",
+                    "pre_licensing_course_last_login_date",
+                    "ple_date_completed_date",
+                    "ple_complete_number",
+                    "percentage_prep_complete_number",
+                    "percentage_sim_complete_number"
+                ]
+                upd = {k: back4app_payload[k] for k in update_fields if k in back4app_payload}
+                if upd:  # Só atualizar se houver campos para atualizar
                     rid = back4app_existing.get("objectId")
                     await update_record_back4app(session, rid, upd, str(back4app_email))
                     updated_records_back4app_count += 1
                     logger.info(f"[BACK4APP UPDATED] {back4app_email} — changes: {upd}")
                 else:
-                    logger.debug(f"[BACK4APP SKIPPED] {back4app_email} — CSV={back4app_csv_dt}, DB={back4app_db_dt}")
+                    logger.debug(f"[BACK4APP SKIPPED] {back4app_email} — no changes needed")
             else:
                 await create_record_back4app(session, back4app_payload)
                 new_records_back4app_count += 1
@@ -470,13 +565,45 @@ async def process_chunk(chunk, session, sem):
             logger.error(f"Task failed: {result}")
             # Continue processing other rows
 
-async def main_async(rows):
+async def main_async(rows, csv_url: str = "", csv_filename: str = ""):
     sem = asyncio.Semaphore(MAX_CONCURRENT)
     connector = aiohttp.TCPConnector(limit_per_host=MAX_CONCURRENT)
+    csv_file_id = None
+    
     async with aiohttp.ClientSession(connector=connector) as session:
-        for idx in range(0, len(rows), CHUNK_SIZE):
-            chunk = rows[idx : idx + CHUNK_SIZE]
-            await process_chunk(chunk, session, sem)
+        # Step 1: Save CSV file to CSV_Files table if URL provided
+        if csv_url and csv_filename:
+            try:
+                csv_content = await fetch_csv_from_url(session, csv_url)
+                csv_file_id = await save_csv_file(session, csv_url, csv_content, csv_filename)
+                await update_csv_file_status(session, csv_file_id, "processing")
+            except Exception as e:
+                logger.error(f"[CSV SAVE ERROR] Failed to save CSV file: {e}")
+                if csv_file_id:
+                    await update_csv_file_status(session, csv_file_id, "error", error_message=str(e))
+                return
+        
+        # Step 2: Process rows in chunks
+        total_processed = 0
+        try:
+            for idx in range(0, len(rows), CHUNK_SIZE):
+                chunk = rows[idx : idx + CHUNK_SIZE]
+                await process_chunk(chunk, session, sem)
+                total_processed += len(chunk)
+                
+                # Update progress
+                if csv_file_id:
+                    await update_csv_file_status(session, csv_file_id, "processing", total_processed)
+            
+            # Mark as completed
+            if csv_file_id:
+                await update_csv_file_status(session, csv_file_id, "completed", total_processed)
+                
+        except Exception as e:
+            logger.error(f"[PROCESSING ERROR] Failed to process rows: {e}")
+            if csv_file_id:
+                await update_csv_file_status(session, csv_file_id, "error", total_processed, str(e))
+            raise
 
 # Google Cloud Function Entry Point
 
@@ -564,8 +691,12 @@ def process_csv_endpoint():
                 text_stream = io.StringIO(content)
                 reader = csv.DictReader(text_stream)
                 rows = [row for row in reader if any(row.values())]
-                logger.info(f"Starting processing of {len(rows)} rows")
-                await main_async(rows)
+                
+                # Extract filename from URL or use default
+                filename = csv_url.split('/')[-1] if '/' in csv_url else f"csv_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                
+                logger.info(f"Starting processing of {len(rows)} rows from {filename}")
+                await main_async(rows, csv_url, filename)
         
         asyncio.run(process_csv())
 
