@@ -505,6 +505,9 @@ async def handle_row(row, bubble_map, back4app_map, session, sem):
         
         # Process Bubble DISABLED (focando apenas no Back4App)
         logger.debug(f"[BUBBLE DISABLED] Skipping Bubble processing for {back4app_email}")
+        
+        # Return counts for this row
+        return 0, 0, (1 if not back4app_existing else 0), (1 if back4app_existing else 0)
 
 async def process_chunk(chunk, session, sem):
     # Extract emails for Back4App only (Bubble disabled)
