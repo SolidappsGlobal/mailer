@@ -461,10 +461,11 @@ async def handle_row(row, bubble_map, back4app_map, session, sem):
             back4app_csv_val = back4app_payload.get("pre_licensing_course_last_login_date")
             back4app_csv_dt = None
             if back4app_csv_val:
-                back4app_csv_dt = (
-                    datetime.fromisoformat(back4app_csv_val.replace("Z", "+00:00"))
-                            .astimezone(timezone.utc)
-                )
+                try:
+                    back4app_csv_dt = parse_record_date(back4app_csv_val)
+                except Exception as e:
+                    logger.warning(f"Couldn't parse CSV last login date '{back4app_csv_val}': {e}")
+                    back4app_csv_dt = None
             
             # Process Back4App record
             if back4app_existing:
@@ -526,10 +527,25 @@ async def process_chunk(chunk, session, sem):
     # Process each row for both platforms
     tasks = [handle_row(row, bubble_map, back4app_map, session, sem) for row in chunk]
     results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Count successful results
+    new_bubble = 0
+    updated_bubble = 0
+    new_back4app = 0
+    updated_back4app = 0
+    
     for result in results:
         if isinstance(result, Exception):
             logger.error(f"Task failed: {result}")
             # Continue processing other rows
+        else:
+            # result is a tuple: (new_bubble, updated_bubble, new_back4app, updated_back4app)
+            new_bubble += result[0]
+            updated_bubble += result[1]
+            new_back4app += result[2]
+            updated_back4app += result[3]
+    
+    return new_bubble, updated_bubble, new_back4app, updated_back4app
 
 async def main_async(rows, csv_url: str = "", csv_filename: str = ""):
     sem = asyncio.Semaphore(MAX_CONCURRENT)
@@ -551,11 +567,21 @@ async def main_async(rows, csv_url: str = "", csv_filename: str = ""):
         
         # Step 2: Process rows in chunks
         total_processed = 0
+        total_new_bubble = 0
+        total_updated_bubble = 0
+        total_new_back4app = 0
+        total_updated_back4app = 0
+        
         try:
             for idx in range(0, len(rows), CHUNK_SIZE):
                 chunk = rows[idx : idx + CHUNK_SIZE]
-                await process_chunk(chunk, session, sem)
+                new_bubble, updated_bubble, new_back4app, updated_back4app = await process_chunk(chunk, session, sem)
+                
                 total_processed += len(chunk)
+                total_new_bubble += new_bubble
+                total_updated_bubble += updated_bubble
+                total_new_back4app += new_back4app
+                total_updated_back4app += updated_back4app
                 
                 # Update progress
                 if csv_file_id:
@@ -564,6 +590,9 @@ async def main_async(rows, csv_url: str = "", csv_filename: str = ""):
             # Mark as completed
             if csv_file_id:
                 await update_csv_file_status(session, csv_file_id, "completed", total_processed)
+            
+            # Log final results
+            logger.info(f"Processing completed — Bubble: {total_new_bubble} new, {total_updated_bubble} updated. Back4App: {total_new_back4app} new, {total_updated_back4app} updated.")
                 
         except Exception as e:
             logger.error(f"[PROCESSING ERROR] Failed to process rows: {e}")
