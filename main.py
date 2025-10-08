@@ -124,10 +124,19 @@ def parse_record_date(s) -> datetime:
         s = s["iso"]
     
     # Se for string, processar normalmente
-    if isinstance(s, str):
-        dt_aware = datetime.fromisoformat(s.replace("Z", "+00:00"))
-        dt_utc = dt_aware.astimezone(timezone.utc)
-        return dt_utc
+    if isinstance(s, str) and s.strip():
+        try:
+            dt_aware = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            dt_utc = dt_aware.astimezone(timezone.utc)
+            return dt_utc
+        except ValueError as e:
+            # Tentar parsing alternativo com dateutil
+            try:
+                import dateutil.parser
+                dt = dateutil.parser.parse(s)
+                return dt.astimezone(timezone.utc)
+            except Exception:
+                raise ValueError(f"Erro ao parsear data: {s} - {e}")
     
     # Se não for nem dict nem string válida, lançar erro
     raise ValueError(f"Tipo de data não suportado: {type(s)} - {s}")
@@ -150,13 +159,13 @@ def to_payload(row: dict) -> dict:
 
     payload = {
         "UserPreLicensingEMAIL": email,  # ✅ Campo correto do Bubble
-        "first_name": row.get("FirstName"),
-        "last_name": row.get("LastName"),
-        "phone": phone,
-        "imo": row.get("Department"),
+        # Removido first_name - campo não reconhecido pela API do Bubble
+        # Removido last_name - campo não reconhecido pela API do Bubble
+        # Removido phone - campo não reconhecido pela API do Bubble
+        # Removido imo - campo não reconhecido pela API do Bubble
         **({"date_enrolled": to_utc_iso(enrolled)} if enrolled else {}),
         # Removido pre_licensing_course_last_login - campo não reconhecido pela API do Bubble
-        "time_spent_in_course": row.get("TimeSpent"),
+        # Removido time_spent_in_course - campo não reconhecido pela API do Bubble
         **({"percentage_ple_complete": ple_complete} if ple_complete is not None else {}),
         **({"percentage_prep_complete": prep_complete} if prep_complete is not None else {}),
         **({"percentage_sim_complete": sim_complete} if sim_complete is not None else {}),
