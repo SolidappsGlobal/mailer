@@ -138,6 +138,10 @@ def parse_record_date(s) -> datetime:
             except Exception:
                 raise ValueError(f"Erro ao parsear data: {s} - {e}")
     
+    # Se for None ou string vazia, retornar None
+    if s is None or (isinstance(s, str) and not s.strip()):
+        return None
+    
     # Se não for nem dict nem string válida, lançar erro
     raise ValueError(f"Tipo de data não suportado: {type(s)} - {s}")
 
@@ -166,9 +170,9 @@ def to_payload(row: dict) -> dict:
         **({"date_enrolled": to_utc_iso(enrolled)} if enrolled else {}),
         # Removido pre_licensing_course_last_login - campo não reconhecido pela API do Bubble
         # Removido time_spent_in_course - campo não reconhecido pela API do Bubble
-        **({"percentage_ple_complete": ple_complete} if ple_complete is not None else {}),
-        **({"percentage_prep_complete": prep_complete} if prep_complete is not None else {}),
-        **({"percentage_sim_complete": sim_complete} if sim_complete is not None else {}),
+        # Removido percentage_ple_complete - campo não reconhecido pela API do Bubble
+        # Removido percentage_prep_complete - campo não reconhecido pela API do Bubble
+        # Removido percentage_sim_complete - campo não reconhecido pela API do Bubble
         **({"ple_date_completed": to_utc_iso(completed)} if completed else {}),
         "pre_licensing_course": row.get("Course"),
         "hiring_manager": row.get("HiringManager"),
@@ -498,66 +502,19 @@ async def handle_row(row, bubble_map, back4app_map, session, sem):
             logger.error(f"[BACK4APP ERROR] {back4app_email} — {e}")
             # Continue processing even if Back4App fails
         
-        # Process Bubble SECOND (independente do Back4App)
-        try:
-            bubble_payload = to_payload(row)
-            bubble_email = bubble_payload.get("UserPreLicensingEMAIL")
-            
-            bubble_existing = bubble_map.get(bubble_email) if bubble_email else None
-            
-            # Parse DB "last login" if present (campo removido do Bubble)
-            bubble_db_val = None  # Campo não existe mais no Bubble
-            bubble_db_dt = None
-
-            # Parse CSV "last login" if present (campo removido do Bubble)
-            bubble_csv_val = None  # Campo não existe mais no Bubble
-            bubble_csv_dt = None
-            
-            # Process Bubble record
-            if bubble_existing:
-                # Sempre atualizar se houver dados válidos (removida lógica de comparação de data)
-                update_fields = [
-                    "time_spent_in_course",
-                    "percentage_ple_complete",
-                    "ple_date_completed",
-                    "pre_licensing_course",
-                    "hiring_manager",
-                    "percentage_prep_complete",
-                    "percentage_sim_complete",
-                    "prepared_to_pass",
-                    "date_enrolled"
-                ]
-                upd = {k: bubble_payload[k] for k in update_fields if k in bubble_payload and bubble_payload[k] not in (None, "")}
-                if upd:  # Só atualizar se houver campos para atualizar
-                    rid = bubble_existing.get("_id") or bubble_existing.get("id")
-                    await update_record(session, rid, upd, str(bubble_email))
-                    updated_records_count += 1
-                    logger.info(f"[BUBBLE UPDATED] {bubble_email} — changes: {upd}")
-                else:
-                    logger.debug(f"[BUBBLE SKIPPED] {bubble_email} — no changes needed")
-            else:
-                await create_record(session, bubble_payload)
-                new_records_count += 1
-                logger.info(f"[BUBBLE CREATED] {bubble_email}")
-        except Exception as e:
-            logger.error(f"[BUBBLE ERROR] {bubble_email if 'bubble_email' in locals() else 'unknown'} — {e}")
-            # Continue processing even if Bubble fails
+        # Process Bubble DISABLED (focando apenas no Back4App)
+        logger.debug(f"[BUBBLE DISABLED] Skipping Bubble processing for {back4app_email}")
 
 async def process_chunk(chunk, session, sem):
-    # Extract emails for both platforms
-    bubble_emails = [r.get("EmailAddress", "").lower().strip() for r in chunk if r.get("EmailAddress")]
+    # Extract emails for Back4App only (Bubble disabled)
     back4app_emails = [r.get("EmailAddress", "").lower().strip() for r in chunk if r.get("EmailAddress")]
     
-    # Fetch existing records from both platforms (independente)
-    bubble_map = {}
+    # Fetch existing records from Back4App only
+    bubble_map = {}  # Empty map for Bubble (disabled)
     back4app_map = {}
     
-    try:
-        bubble_map = await get_records_by_emails(session, bubble_emails)
-        logger.info(f"[BUBBLE] Loaded {len(bubble_map)} existing records")
-    except Exception as e:
-        logger.error(f"[BUBBLE] Failed to load existing records: {e}")
-        # Continue without Bubble data
+    # Bubble disabled
+    logger.debug(f"[BUBBLE DISABLED] Skipping Bubble data loading")
     
     try:
         back4app_map = await get_records_by_emails_back4app(session, back4app_emails)
