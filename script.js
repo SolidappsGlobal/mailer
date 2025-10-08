@@ -16,10 +16,9 @@ let columnVisibility = {};
 
 // Configuration
 const CONFIG = {
-    BUBBLE_API_URL: 'https://myunitrust.com/version-live/api/1.1/obj/prelicensingcsv',
-    BUBBLE_TOKEN: 'eafe2749ca27a1c37ccf000431c2d083',
-    BACK4APP_API_URL: 'https://enqueuecsv-nembb96l.b4a.run',
-    BACK4APP_TOKEN: 'eafe2749ca27a1c37ccf000431c2d083'
+    BACK4APP_API_URL: 'https://parseapi.back4app.com/classes/API_Connector_Users',
+    BACK4APP_APP_ID: 'mK60GEj1uzfoICD3dFxW75KZ5K77bbBoaWeeENeK',
+    BACK4APP_MASTER_KEY: 'ZDYmU9PLUhJRhTscXJGBFlU8wThrKY6Q0alTtZu2'
 };
 
 // Initialize the application
@@ -50,10 +49,10 @@ async function loadAgentsData() {
     showLoading(true);
     
     try {
-        // Try to load from Bubble API first
-        const bubbleData = await loadFromBubbleAPI();
-        if (bubbleData && bubbleData.length > 0) {
-            agentsData = processBubbleData(bubbleData);
+        // Load from Back4App API
+        const back4appData = await loadFromBack4AppAPI();
+        if (back4appData && back4appData.length > 0) {
+            agentsData = processBack4AppData(back4appData);
         } else {
             // Fallback to sample data
             agentsData = getSampleData();
@@ -61,6 +60,7 @@ async function loadAgentsData() {
         
         filteredData = [...agentsData];
         renderTable();
+        initializeFilterOptions();
         updateCounts();
         
     } catch (error) {
@@ -69,19 +69,21 @@ async function loadAgentsData() {
         agentsData = getSampleData();
         filteredData = [...agentsData];
         renderTable();
+        initializeFilterOptions();
         updateCounts();
     } finally {
         showLoading(false);
     }
 }
 
-// Load data from Bubble API
-async function loadFromBubbleAPI() {
+// Load data from Back4App API
+async function loadFromBack4AppAPI() {
     try {
-        const response = await fetch(CONFIG.BUBBLE_API_URL, {
+        const response = await fetch(CONFIG.BACK4APP_API_URL, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${CONFIG.BUBBLE_TOKEN}`,
+                'X-Parse-Application-Id': CONFIG.BACK4APP_APP_ID,
+                'X-Parse-Master-Key': CONFIG.BACK4APP_MASTER_KEY,
                 'Content-Type': 'application/json'
             }
         });
@@ -91,39 +93,39 @@ async function loadFromBubbleAPI() {
         }
         
         const data = await response.json();
-        return data.response?.results || [];
+        return data.results || [];
         
     } catch (error) {
-        console.error('Bubble API error:', error);
+        console.error('Back4App API error:', error);
         return null;
     }
 }
 
-// Process Bubble API data
-function processBubbleData(bubbleData) {
-    return bubbleData.map(agent => ({
-        id: agent._id || agent.id,
-        name: agent.first_name && agent.last_name ? 
-            `${agent.first_name} ${agent.last_name}` : 
-            agent.pre_licensing_email || 'Unknown',
-        role: agent.imo || 'Agent',
-        ufg: agent.imo || 'N/A',
-        preLicenseEnrollment: agent.date_enrolled ? 'Yes' : 'No',
+// Process Back4App API data
+function processBack4AppData(back4appData) {
+    return back4appData.map(agent => ({
+        id: agent.objectId || agent.id,
+        name: agent.first_name_text && agent.last_name_text ? 
+            `${agent.first_name_text} ${agent.last_name_text}` : 
+            agent.pre_licensing_email_text || 'Unknown',
+        role: agent.imo_custom_imo || 'Agent',
+        ufg: agent.imo_custom_imo || 'N/A',
+        preLicenseEnrollment: agent.date_enrolled_date ? 'Yes' : 'No',
         licensed: 'No', // Default value
-        preLicensePercent: agent.percentage_ple_complete ? 
-            `${agent.percentage_ple_complete}%` : '-',
-        enrollmentDate: agent.date_enrolled ? 
-            formatDate(agent.date_enrolled) : '-',
-        finishDate: agent.ple_date_completed ? 
-            formatDate(agent.ple_date_completed) : '-',
-        timeSpent: agent.time_spent_in_course || '-',
-        lastLogin: agent.pre_licensing_course_last_login ? 
-            formatDate(agent.pre_licensing_course_last_login) : '-',
-        courseName: agent.pre_licensing_course || '-',
-        preparedToPass: agent.prepared_to_pass || 'No',
-        phone: agent.phone || '-',
-        email: agent.pre_licensing_email || '-',
-        hiringManager: agent.hiring_manager
+        preLicensePercent: agent.ple_complete_number ? 
+            `${agent.ple_complete_number}%` : '-',
+        enrollmentDate: agent.date_enrolled_date ? 
+            formatDate(agent.date_enrolled_date) : '-',
+        finishDate: agent.ple_date_completed_date ? 
+            formatDate(agent.ple_date_completed_date) : '-',
+        timeSpent: agent.time_spent_text || '-',
+        lastLogin: agent.pre_licensing_course_last_login_date ? 
+            formatDate(agent.pre_licensing_course_last_login_date) : '-',
+        courseName: agent.pre_licensing_course_text || '-',
+        preparedToPass: agent.prepared_to_pass_text || 'No',
+        phone: agent.phone_text || '-',
+        email: agent.pre_licensing_email_text || '-',
+        hiringManager: agent.hiring_manager_text
     }));
 }
 
