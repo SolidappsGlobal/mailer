@@ -117,10 +117,19 @@ def parse_csv_date(s: str) -> Optional[datetime]:
         logger.warning(f"Couldn’t parse DateEnrolled '{s}': {e}")
         return None
 
-def parse_record_date(s: str) -> datetime:
-    dt_aware = datetime.fromisoformat(s.replace("Z", "+00:00"))
-    dt_utc = dt_aware.astimezone(timezone.utc)
-    return dt_utc
+def parse_record_date(s) -> datetime:
+    # Se for um dicionário do Back4App com formato de data
+    if isinstance(s, dict) and "__type" in s and s["__type"] == "Date":
+        s = s["iso"]
+    
+    # Se for string, processar normalmente
+    if isinstance(s, str):
+        dt_aware = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        dt_utc = dt_aware.astimezone(timezone.utc)
+        return dt_utc
+    
+    # Se não for nem dict nem string válida, lançar erro
+    raise ValueError(f"Tipo de data não suportado: {type(s)} - {s}")
 
 def to_utc_iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -145,7 +154,7 @@ def to_payload(row: dict) -> dict:
         "phone": phone,
         "imo": row.get("Department"),
         **({"date_enrolled": to_utc_iso(enrolled)} if enrolled else {}),
-        **({"pre_licensing_course_last_login": to_utc_iso(logged)} if logged else {}),
+        # Removido pre_licensing_course_last_login - campo não reconhecido pela API do Bubble
         "time_spent_in_course": row.get("TimeSpent"),
         **({"percentage_ple_complete": ple_complete} if ple_complete is not None else {}),
         **({"percentage_prep_complete": prep_complete} if prep_complete is not None else {}),
@@ -392,43 +401,36 @@ async def handle_row(row, bubble_map, back4app_map, session, sem):
             
             bubble_existing = bubble_map.get(bubble_email) if bubble_email else None
             
-            # Parse DB "last login" if present
-            bubble_db_val = bubble_existing.get("pre_licensing_course_last_login") if bubble_existing else None
+            # Parse DB "last login" if present (campo removido do Bubble)
+            bubble_db_val = None  # Campo não existe mais no Bubble
             bubble_db_dt = None
-            if bubble_db_val:
-                bubble_db_dt = parse_record_date(bubble_db_val)
 
-            # Parse CSV "last login" if present
-            bubble_csv_val = bubble_payload.get("pre_licensing_course_last_login")
+            # Parse CSV "last login" if present (campo removido do Bubble)
+            bubble_csv_val = None  # Campo não existe mais no Bubble
             bubble_csv_dt = None
-            if bubble_csv_val:
-                bubble_csv_dt = (
-                    datetime.fromisoformat(bubble_csv_val.replace("Z", "+00:00"))
-                            .astimezone(timezone.utc)
-                )
             
             # Process Bubble record
             if bubble_existing:
-                if bubble_csv_dt and (bubble_db_dt is None or bubble_csv_dt > bubble_db_dt):
-                    update_fields = [
-                        "pre_licensing_course_last_login",
-                        "time_spent_in_course",
-                        "percentage_ple_complete",
-                        "ple_date_completed",
-                        "pre_licensing_course",
-                        "hiring_manager",
-                        "percentage_prep_complete",
-                        "percentage_sim_complete",
-                        "prepared_to_pass",
-                        "date_enrolled"
-                    ]
-                    upd = {k: bubble_payload[k] for k in update_fields if k in bubble_payload and bubble_payload[k] not in (None, "")}
+                # Sempre atualizar se houver dados válidos (removida lógica de comparação de data)
+                update_fields = [
+                    "time_spent_in_course",
+                    "percentage_ple_complete",
+                    "ple_date_completed",
+                    "pre_licensing_course",
+                    "hiring_manager",
+                    "percentage_prep_complete",
+                    "percentage_sim_complete",
+                    "prepared_to_pass",
+                    "date_enrolled"
+                ]
+                upd = {k: bubble_payload[k] for k in update_fields if k in bubble_payload and bubble_payload[k] not in (None, "")}
+                if upd:  # Só atualizar se houver campos para atualizar
                     rid = bubble_existing.get("_id") or bubble_existing.get("id")
                     await update_record(session, rid, upd, str(bubble_email))
                     updated_records_count += 1
                     logger.info(f"[BUBBLE UPDATED] {bubble_email} — changes: {upd}")
                 else:
-                    logger.debug(f"[BUBBLE SKIPPED] {bubble_email} — CSV={bubble_csv_dt}, DB={bubble_db_dt}")
+                    logger.debug(f"[BUBBLE SKIPPED] {bubble_email} — no changes needed")
             else:
                 await create_record(session, bubble_payload)
                 new_records_count += 1
