@@ -651,16 +651,9 @@ def serve_styles():
 
 @app.route('/', methods=['POST'])
 def process_csv_endpoint():
-    """Main CSV processing endpoint"""
+    """Main CSV processing endpoint - Returns immediately, processes in background"""
     logger.info("CSV processing endpoint called")
     try:
-        # Reset counters
-        global new_records_count, updated_records_count, new_records_back4app_count, updated_records_back4app_count
-        new_records_count = 0
-        updated_records_count = 0
-        new_records_back4app_count = 0
-        updated_records_back4app_count = 0
-        
         # Check for the 'bubble' header with value 'X'
         if request.headers.get('bubble') != 'eafe2749ca27a1c37ccf000431c2d083':
             logger.error("Unauthorized request: missing or invalid 'bubble' header")
@@ -679,36 +672,57 @@ def process_csv_endpoint():
         if not isinstance(csv_url, str) or not csv_url.strip():
             return jsonify({"error": "Invalid or empty URL"}), 400
 
-        logger.info(f"Processing CSV from URL: {csv_url}")
+        logger.info(f"Starting background processing for CSV: {csv_url}")
 
-        # Fetch CSV content from URL
-        async def process_csv():
-            async with aiohttp.ClientSession() as session:
-                logger.info("Fetching CSV content from URL")
-                content = await fetch_csv_from_url(session, csv_url)
-                text_stream = io.StringIO(content)
-                reader = csv.DictReader(text_stream)
-                rows = [row for row in reader if any(row.values())]
+        # Start background processing
+        def run_background_processing():
+            try:
+                # Reset counters
+                global new_records_count, updated_records_count, new_records_back4app_count, updated_records_back4app_count
+                new_records_count = 0
+                updated_records_count = 0
+                new_records_back4app_count = 0
+                updated_records_back4app_count = 0
                 
-                # Extract filename from URL or use default
-                filename = csv_url.split('/')[-1] if '/' in csv_url else f"csv_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                # Fetch CSV content from URL
+                async def process_csv():
+                    async with aiohttp.ClientSession() as session:
+                        logger.info("Fetching CSV content from URL")
+                        content = await fetch_csv_from_url(session, csv_url)
+                        text_stream = io.StringIO(content)
+                        reader = csv.DictReader(text_stream)
+                        rows = [row for row in reader if any(row.values())]
+                        
+                        # Extract filename from URL or use default
+                        filename = csv_url.split('/')[-1] if '/' in csv_url else f"csv_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                        
+                        logger.info(f"Starting background processing of {len(rows)} rows from {filename}")
+                        await main_async(rows, csv_url, filename)
                 
-                logger.info(f"Starting processing of {len(rows)} rows from {filename}")
-                await main_async(rows, csv_url, filename)
-        
-        asyncio.run(process_csv())
+                asyncio.run(process_csv())
 
-        logger.info(f"Processing completed — Bubble: {new_records_count} new, "
-                    f"{updated_records_count} updated. Back4App: {new_records_back4app_count} new, "
-                    f"{updated_records_back4app_count} updated.")
+                logger.info(f"Background processing completed — Bubble: {new_records_count} new, "
+                            f"{updated_records_count} updated. Back4App: {new_records_back4app_count} new, "
+                            f"{updated_records_back4app_count} updated.")
+            except Exception as e:
+                logger.error(f"Background processing failed: {e}")
         
+        # Start background thread
+        import threading
+        thread = threading.Thread(target=run_background_processing)
+        thread.daemon = True
+        thread.start()
+        
+        # Return immediately
         return jsonify({
-            "message": "Processing completed",
-            "bubble": {"new": new_records_count, "updated": updated_records_count},
-            "back4app": {"new": new_records_back4app_count, "updated": updated_records_back4app_count}
+            "message": "Processing started in background",
+            "status": "queued",
+            "csv_url": csv_url,
+            "note": "Check Prelicensingcsv table for processing status"
         }), 200
+        
     except Exception as e:
-        logger.error(f"Error processing request: {e}")
+        logger.error(f"Error starting background processing: {e}")
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
 # Cloud Run entry point
