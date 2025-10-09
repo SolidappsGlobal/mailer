@@ -139,16 +139,18 @@ body {
     background: white;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: visible;
+    max-height: 80vh;
 }
 
 /* Table Styles */
 .agents-table {
     width: 100%;
+    min-width: 2000px; /* Ensure all columns are visible */
     border-collapse: collapse;
     font-size: 14px;
-    min-width: 1200px;
-    table-layout: auto;
+    table-layout: fixed; /* Better control over column widths */
 }
 
 .agents-table thead {
@@ -167,12 +169,27 @@ body {
     white-space: nowrap;
     overflow: visible;
     text-overflow: unset;
+    min-width: 120px; /* Minimum width for all columns */
 }
+
+/* Specific column widths */
+.agents-table th:nth-child(1) { width: 250px; } /* Agent */
+.agents-table th:nth-child(2) { width: 120px; } /* UFG */
+.agents-table th:nth-child(3) { width: 150px; } /* Pre-License Enrollment */
+.agents-table th:nth-child(4) { width: 100px; } /* Licensed */
+.agents-table th:nth-child(5) { width: 120px; } /* Pre-License % */
+.agents-table th:nth-child(6) { width: 130px; } /* Enrollment Date */
+.agents-table th:nth-child(7) { width: 120px; } /* Finish Date */
+.agents-table th:nth-child(8) { width: 120px; } /* Time Spent */
+.agents-table th:nth-child(9) { width: 120px; } /* Last Login */
+.agents-table th:nth-child(10) { width: 150px; } /* Course Name */
+.agents-table th:nth-child(11) { width: 140px; } /* Prepared To Pass */
+.agents-table th:nth-child(12) { width: 130px; } /* Phone */
 
 /* First column header specific styles */
 .agents-table th:first-child {
     min-width: 250px;
-    width: auto;
+    width: 250px;
     white-space: normal;
     word-wrap: break-word;
     overflow-wrap: break-word;
@@ -411,12 +428,27 @@ body {
     white-space: nowrap;
     overflow: visible;
     text-overflow: unset;
+    min-width: 120px; /* Minimum width for all columns */
 }
+
+/* Specific column widths for data cells */
+.agents-table td:nth-child(1) { width: 250px; } /* Agent */
+.agents-table td:nth-child(2) { width: 120px; } /* UFG */
+.agents-table td:nth-child(3) { width: 150px; } /* Pre-License Enrollment */
+.agents-table td:nth-child(4) { width: 100px; } /* Licensed */
+.agents-table td:nth-child(5) { width: 120px; } /* Pre-License % */
+.agents-table td:nth-child(6) { width: 130px; } /* Enrollment Date */
+.agents-table td:nth-child(7) { width: 120px; } /* Finish Date */
+.agents-table td:nth-child(8) { width: 120px; } /* Time Spent */
+.agents-table td:nth-child(9) { width: 120px; } /* Last Login */
+.agents-table td:nth-child(10) { width: 150px; } /* Course Name */
+.agents-table td:nth-child(11) { width: 140px; } /* Prepared To Pass */
+.agents-table td:nth-child(12) { width: 130px; } /* Phone */
 
 /* First column specific styles */
 .agents-table td:first-child {
     min-width: 250px;
-    width: auto;
+    width: 250px;
     white-space: normal;
     word-wrap: break-word;
     overflow-wrap: break-word;

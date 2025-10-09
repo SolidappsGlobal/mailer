@@ -63,6 +63,14 @@ async function loadAgentsData() {
         initializeFilterOptions();
         updateCounts();
         
+        // Debug: Show breakdown by IMO
+        const imoBreakdown = {};
+        agentsData.forEach(agent => {
+            const imo = agent.ufg || 'Unknown';
+            imoBreakdown[imo] = (imoBreakdown[imo] || 0) + 1;
+        });
+        console.log('Records breakdown by IMO:', imoBreakdown);
+        
     } catch (error) {
         console.error('Error loading data:', error);
         // Use sample data as fallback
@@ -79,21 +87,108 @@ async function loadAgentsData() {
 // Load data from Back4App API
 async function loadFromBack4AppAPI() {
     try {
-        const response = await fetch(CONFIG.BACK4APP_API_URL, {
-            method: 'GET',
-            headers: {
-                'X-Parse-Application-Id': CONFIG.BACK4APP_APP_ID,
-                'X-Parse-Master-Key': CONFIG.BACK4APP_MASTER_KEY,
-                'Content-Type': 'application/json'
-            }
-        });
+        // First, count total records for Unitrust Financial (try different variations)
+        const countQueries = [
+            {"imo_custom_imo": "Unitrust Financial"},
+            {"imo_custom_imo": "\"Unitrust Financial\""},
+            {"imo_custom_imo": {"$regex": "Unitrust", "$options": "i"}}
+        ];
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        let totalRecords = 0;
+        let bestQuery = null;
+        
+        for (const query of countQueries) {
+            try {
+                const countResponse = await fetch(`${CONFIG.BACK4APP_API_URL}?where=${encodeURIComponent(JSON.stringify(query))}&count=1&limit=0`, {
+                    method: 'GET',
+                    headers: {
+                        'X-Parse-Application-Id': CONFIG.BACK4APP_APP_ID,
+                        'X-Parse-Master-Key': CONFIG.BACK4APP_MASTER_KEY,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (countResponse.ok) {
+                    const countData = await countResponse.json();
+                    const count = countData.count || 0;
+                    console.log(`Query ${JSON.stringify(query)}: ${count} records`);
+                    
+                    if (count > totalRecords) {
+                        totalRecords = count;
+                        bestQuery = query;
+                    }
+                }
+            } catch (error) {
+                console.error(`Error with query ${JSON.stringify(query)}:`, error);
+            }
         }
         
-        const data = await response.json();
-        return data.results || [];
+        console.log(`Best query found: ${JSON.stringify(bestQuery)} with ${totalRecords} records`);
+        
+        // Also try to get total count without filter to see all records
+        try {
+            const totalCountResponse = await fetch(`${CONFIG.BACK4APP_API_URL}?count=1&limit=0`, {
+                method: 'GET',
+                headers: {
+                    'X-Parse-Application-Id': CONFIG.BACK4APP_APP_ID,
+                    'X-Parse-Master-Key': CONFIG.BACK4APP_MASTER_KEY,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (totalCountResponse.ok) {
+                const totalCountData = await totalCountResponse.json();
+                console.log(`Total records in table: ${totalCountData.count || 0}`);
+            }
+        } catch (error) {
+            console.error('Error getting total count:', error);
+        }
+        
+        // Load all records in batches using the best query
+        const allRecords = [];
+        let skip = 0;
+        const limit = 100; // Maximum per request from Back4App
+        
+        while (skip < totalRecords) {
+            try {
+                const response = await fetch(`${CONFIG.BACK4APP_API_URL}?where=${encodeURIComponent(JSON.stringify(bestQuery))}&limit=${limit}&skip=${skip}`, {
+                    method: 'GET',
+                    headers: {
+                        'X-Parse-Application-Id': CONFIG.BACK4APP_APP_ID,
+                        'X-Parse-Master-Key': CONFIG.BACK4APP_MASTER_KEY,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const records = data.results || [];
+                
+                if (records.length === 0) break;
+                
+                allRecords.push(...records);
+                skip += limit;
+                
+                // Update progress
+                const progress = Math.min((skip / totalRecords) * 100, 100);
+                console.log(`Loading progress: ${Math.round(progress)}% (${skip}/${totalRecords})`);
+                
+            } catch (error) {
+                console.error(`Error loading batch ${skip}-${skip + limit}:`, error);
+                break;
+            }
+        }
+        
+        console.log(`Successfully loaded ${allRecords.length} records`);
+        
+        // Debug: Check what IMO values we actually got
+        const imoValues = [...new Set(allRecords.map(record => record.imo_custom_imo))];
+        console.log('Unique IMO values found:', imoValues);
+        
+        return allRecords;
         
     } catch (error) {
         console.error('Back4App API error:', error);
@@ -546,6 +641,13 @@ document.addEventListener('DOMContentLoaded', function() {
     refreshBtn.addEventListener('click', refreshData);
     headerRight.insertBefore(refreshBtn, headerRight.firstChild);
     
+    // Add "Load All Records" button for debugging
+    const loadAllBtn = document.createElement('button');
+    loadAllBtn.className = 'btn btn-secondary';
+    loadAllBtn.innerHTML = '<i class="fas fa-database"></i> Load All';
+    loadAllBtn.addEventListener('click', loadAllRecordsWithoutFilter);
+    headerRight.insertBefore(loadAllBtn, refreshBtn);
+    
     // Load initial data
     loadAgentsData();
     
@@ -559,6 +661,88 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// Function to load ALL records without any filter (for debugging)
+async function loadAllRecordsWithoutFilter() {
+    showLoading(true);
+    
+    try {
+        console.log('Loading ALL records without filter...');
+        
+        // Count total records
+        const countResponse = await fetch(`${CONFIG.BACK4APP_API_URL}?count=1&limit=0`, {
+            method: 'GET',
+            headers: {
+                'X-Parse-Application-Id': CONFIG.BACK4APP_APP_ID,
+                'X-Parse-Master-Key': CONFIG.BACK4APP_MASTER_KEY,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (countResponse.ok) {
+            const countData = await countResponse.json();
+            const totalRecords = countData.count || 0;
+            console.log(`Total records in database: ${totalRecords}`);
+            
+            // Load all records in batches
+            const allRecords = [];
+            let skip = 0;
+            const limit = 100;
+            
+            while (skip < totalRecords) {
+                const response = await fetch(`${CONFIG.BACK4APP_API_URL}?limit=${limit}&skip=${skip}`, {
+                    method: 'GET',
+                    headers: {
+                        'X-Parse-Application-Id': CONFIG.BACK4APP_APP_ID,
+                        'X-Parse-Master-Key': CONFIG.BACK4APP_MASTER_KEY,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const records = data.results || [];
+                    
+                    if (records.length === 0) break;
+                    
+                    allRecords.push(...records);
+                    skip += limit;
+                    
+                    const progress = Math.min((skip / totalRecords) * 100, 100);
+                    console.log(`Loading all records: ${Math.round(progress)}% (${skip}/${totalRecords})`);
+                } else {
+                    break;
+                }
+            }
+            
+            console.log(`Loaded ${allRecords.length} total records`);
+            
+            // Analyze IMO values
+            const imoAnalysis = {};
+            allRecords.forEach(record => {
+                const imo = record.imo_custom_imo || 'Empty';
+                imoAnalysis[imo] = (imoAnalysis[imo] || 0) + 1;
+            });
+            
+            console.log('Complete IMO analysis:', imoAnalysis);
+            
+            // Process and display all records
+            agentsData = processBack4AppData(allRecords);
+            filteredData = [...agentsData];
+            renderTable();
+            initializeFilterOptions();
+            updateCounts();
+            
+        } else {
+            console.error('Failed to get total count');
+        }
+        
+    } catch (error) {
+        console.error('Error loading all records:', error);
+    } finally {
+        showLoading(false);
+    }
+}
 
 // Initialize filter options for each column
 function initializeFilterOptions() {
